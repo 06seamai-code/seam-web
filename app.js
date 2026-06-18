@@ -38,20 +38,42 @@ $('toggle-mode').onclick = () => {
   signupMode = !signupMode;
   $('btn-auth').textContent = signupMode ? 'Create account' : 'Sign in';
   $('toggle-mode').textContent = signupMode ? 'Have an account? Sign in' : 'New here? Create an account';
-  $('login-sub').textContent = signupMode ? 'Create an account to save your chats.' : 'Sign in to access your chats and projects.';
 };
+// Reveal the email/password fallback (UCD Connect is the primary path).
+$('show-email').onclick = () => { $('email-block').style.display = 'block'; $('show-email').style.display = 'none'; };
+// If ucd-logo.png isn't present, fall back to the "UCD" text box.
+(function () {
+  const img = $('ucd-logo');
+  if (img) img.onerror = () => { img.style.display = 'none'; const fb = $('ucd-fallback'); if (fb) fb.style.display = 'flex'; };
+})();
+// Only let people CREATE accounts with a university email. (Sign-in is left open
+// so existing accounts still work; new sign-ups must be UCD.)
+const UCD_DOMAINS = ['ucdconnect.ie', 'ucd.ie'];
 $('btn-auth').onclick = async () => {
   const email = $('email').value.trim();
   const password = $('password').value;
   $('login-err').textContent = '';
-  if (!email || !password) { $('login-err').textContent = 'Enter email and password.'; return; }
+  if (!email || !password) { $('login-err').textContent = 'Enter your UCD email and password.'; return; }
+  if (signupMode) {
+    const domain = (email.split('@')[1] || '').toLowerCase();
+    if (!UCD_DOMAINS.includes(domain)) { $('login-err').textContent = 'Please use your UCD email (@ucdconnect.ie) to create an account.'; return; }
+  }
   const fn = signupMode ? sb.auth.signUp({ email, password }) : sb.auth.signInWithPassword({ email, password });
   const { error } = await fn;
   if (error) $('login-err').textContent = error.message;
-  else if (signupMode) $('login-err').textContent = 'Check your email to confirm your account, then sign in.';
+  else if (signupMode) $('login-err').textContent = 'Check your UCD email to confirm your account, then sign in.';
 };
-$('btn-google').onclick = () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
-$('btn-ms').onclick = () => sb.auth.signInWithOAuth({ provider: 'azure', options: { scopes: 'email', redirectTo: location.origin + location.pathname } });
+// Microsoft = UCD Connect (UCD identity runs on Microsoft 365). Students use their @ucdconnect.ie login here.
+// Until the Azure provider is configured in Supabase, this fails gracefully and points to the email option.
+$('btn-ms').onclick = async () => {
+  $('login-err').textContent = '';
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'azure', options: { scopes: 'openid email profile', redirectTo: location.origin + location.pathname } });
+  if (error) {
+    $('login-err').textContent = 'UCD Connect sign-in isn’t switched on yet — use “Other sign-in options” below for now.';
+    $('email-block').style.display = 'block';
+    const se = $('show-email'); if (se) se.style.display = 'none';
+  }
+};
 // Sign-out lives in the Settings modal (#settings-signout), wired further down.
 
 /* ---------------- Brightspace data (synced from the extension) ---------------- */

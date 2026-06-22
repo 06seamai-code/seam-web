@@ -34,6 +34,12 @@
     "Match length to the question: a short or simple question gets a short answer (often 1-3 sentences); do NOT pad, over-explain, repeat the question back, or volunteer long tangents and extra sections they didn't ask about. " +
     "Use tight bullets or short paragraphs, not walls of text. Warm, personal and encouraging — address the student directly and use their first name occasionally when you know it. Quality over quantity: say what's useful, then stop.";
 
+  const QUIZ =
+    "QUIZZES — When the student asks to be quizzed or tested, or for a quiz / practice questions / 'quiz me' / revision questions: reply with ONE short intro sentence, then a fenced code block tagged exactly seam-quiz containing ONLY JSON of this shape: " +
+    "{\"title\":\"Quiz: <topic>\",\"questions\":[{\"q\":\"question?\",\"options\":[\"opt A\",\"opt B\",\"opt C\",\"opt D\"],\"answer\":0,\"explain\":\"one short line why\"}]}. " +
+    "\"answer\" is the 0-based index of the correct option. Default to 5 questions (or the number asked), exactly 4 options each, exactly one correct, plausible distractors. " +
+    "Base questions on the student's OWN module/lecture/SISWeb content when it's provided in this message; otherwise use solid general knowledge of the topic. Keep them clear and exam-relevant. Output nothing after the block.";
+
   const SLIDE_RULES =
     "Lecture text is split by literal markers \"=== Slide N/Total ===\" and \"=== Page N/Total ===\". " +
     "When asked for a specific slide/page, find that EXACT marker and reproduce ONLY the text between it and the next marker, verbatim — never paraphrase, merge or renumber. " +
@@ -56,6 +62,7 @@
       opts.nowStr ? ("The current local date/time is " + opts.nowStr + ". Treat this as \"now\" for anything time-relative.") : "",
       CAPABILITIES,
       STYLE,
+      QUIZ,
       SAFETY,
       SLIDE_RULES,
       opts.loadedNote || "",
@@ -219,7 +226,7 @@
   };
 
   const SeamCore = {
-    PERSONA, CAPABILITIES, STYLE, SAFETY, SLIDE_RULES, REFERENCE_MODE,
+    PERSONA, CAPABILITIES, STYLE, QUIZ, SAFETY, SLIDE_RULES, REFERENCE_MODE,
     buildSystemPrompt, pickRelevant, pickLectures, buildLectureIndex,
     consumeSSE, ConversationTree,
   };

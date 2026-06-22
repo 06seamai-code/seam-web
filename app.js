@@ -400,14 +400,66 @@ function inlineMd(s) {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 
+// Turn a ```seam-quiz JSON block into an interactive quiz widget.
+function renderQuiz(code) {
+  const json = code.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();
+  let data;
+  try { data = JSON.parse(json); } catch (e) { return '<pre class="md-pre"><code>' + code + '</code></pre>'; }
+  if (!data || !Array.isArray(data.questions)) return '<pre class="md-pre"><code>' + code + '</code></pre>';
+  const qs = data.questions.slice(0, 25);
+  let h = '<div class="quiz" data-total="' + qs.length + '">';
+  if (data.title) h += '<div class="quiz-title">' + escapeHtml(data.title) + '</div>';
+  qs.forEach((q, i) => {
+    const opts = Array.isArray(q.options) ? q.options : [];
+    const ans = Math.max(0, Math.min(opts.length - 1, parseInt(q.answer, 10) || 0));
+    h += '<div class="quiz-q" data-correct="' + ans + '" data-explain="' + escapeHtml(q.explain || '') + '">';
+    h += '<div class="quiz-qtext">' + (i + 1) + '. ' + escapeHtml(q.q || '') + '</div><div class="quiz-opts">';
+    opts.forEach((o, j) => { h += '<button class="quiz-opt" data-j="' + j + '">' + escapeHtml(o) + '</button>'; });
+    h += '</div><div class="quiz-feedback"></div></div>';
+  });
+  return h + '<div class="quiz-score"></div></div>';
+}
+
+// Attach click behaviour to any quiz widgets inside an element.
+function wireQuizzes(container) {
+  container.querySelectorAll('.quiz').forEach(quiz => {
+    const qEls = [...quiz.querySelectorAll('.quiz-q')];
+    const total = qEls.length; let answered = 0, score = 0;
+    qEls.forEach(q => {
+      const correct = +q.dataset.correct;
+      const opts = [...q.querySelectorAll('.quiz-opt')];
+      opts.forEach(btn => {
+        btn.onclick = () => {
+          if (q.classList.contains('done')) return;
+          q.classList.add('done');
+          const chosen = +btn.dataset.j;
+          if (opts[correct]) opts[correct].classList.add('correct');
+          if (chosen === correct) score++; else btn.classList.add('wrong');
+          const fb = q.querySelector('.quiz-feedback');
+          fb.textContent = (chosen === correct ? '✓ Correct. ' : '✗ ') + (q.dataset.explain || '');
+          fb.classList.add('show');
+          if (++answered === total) {
+            const s = quiz.querySelector('.quiz-score');
+            if (s) { s.textContent = 'Score: ' + score + '/' + total + (score === total ? ' 🎉' : ''); s.classList.add('show'); }
+          }
+        };
+      });
+    });
+  });
+}
+
+// Set assistant HTML + wire any interactive widgets (quizzes).
+function setSeamHtml(el, text) { el.innerHTML = formatResponse(text); wireQuizzes(el); }
+
 // Lightweight markdown → HTML renderer (headings, tables, code blocks, lists, paragraphs).
 function formatResponse(text) {
   const src = escapeHtml(text);
   // Pull fenced code blocks out first so their contents aren't touched. The
   // sentinel sits on its own line and is restored after all other processing.
   const blocks = [];
-  const staged = src.replace(/```(\w+)?\n?([\s\S]*?)```/g, (_m, _lang, code) => {
-    blocks.push('<pre class="md-pre"><code>' + code.replace(/\n+$/, '') + '</code></pre>');
+  const staged = src.replace(/```([\w-]+)?\n?([\s\S]*?)```/g, (_m, lang, code) => {
+    if ((lang || '').toLowerCase() === 'seam-quiz') blocks.push(renderQuiz(code));
+    else blocks.push('<pre class="md-pre"><code>' + code.replace(/\n+$/, '') + '</code></pre>');
     return '\nSEAMCB' + (blocks.length - 1) + 'END\n';
   });
 
@@ -459,7 +511,7 @@ function renderMessages(msgs) {
     if (!greetState) greetState = { greet: pick(GREETINGS).replace('{name}', name), q: pick(QUOTES) };
     const greet = greetState.greet;
     const q = greetState.q;
-    const chips = ['Summarise a lecture', 'Plan my week', 'Help with an essay', 'Explain a concept'];
+    const chips = ['Quiz me on a module', 'Summarise a lecture', 'Plan my week', 'Help with an essay'];
     wrap.innerHTML = '<div class="empty"><div class="e-mark">S</div>' +
       '<div class="greet">' + escapeHtml(greet) + '</div>' +
       '<div class="quote"><span class="qmark">“</span>' + escapeHtml(q.text) + '<span class="qmark">”</span>' +
@@ -487,6 +539,7 @@ function appendBubble(role, content) {
   div.innerHTML = '<div class="avatar ' + cls + '">' + av + '</div><div class="bubble ' + cls + '">' +
     (role === 'user' ? escapeHtml(content) : formatResponse(content)) + '</div>';
   wrap.appendChild(div);
+  if (role !== 'user') wireQuizzes(div);   // make any quiz widgets interactive
   $('messages').scrollTop = $('messages').scrollHeight;
   return div.querySelector('.bubble');
 }
@@ -645,7 +698,7 @@ async function sendMessage() {
       $('messages').scrollTop = $('messages').scrollHeight;
     });
     bubble.classList.remove('streaming');
-    bubble.innerHTML = formatResponse(reply);   // swap raw stream for clean formatted markdown
+    setSeamHtml(bubble, reply);   // clean formatted markdown + interactive quizzes
   } catch (err) {
     bubble.classList.remove('streaming');
     if (err && err.name === 'AbortError') bubble.innerHTML = formatResponse(reply + '\n\n_(stopped)_');

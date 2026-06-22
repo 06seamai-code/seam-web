@@ -91,6 +91,8 @@ async function loadBrightspace() {
     const catN = (bsData && bsData.lectureCatalog || []).length;
     console.log('[Seam web] lecture_text rows in cloud: ' + bsLectureIndex.length + ' (catalog lists ' + catN + ')' + (error ? ' — query error: ' + error.message : ''));
     if (bsLectureIndex.length) console.log('[Seam web] sample synced:', bsLectureIndex.slice(0, 5).map(r => r.title));
+    const sw = (bsData && bsData.sisweb) ? Object.keys(bsData.sisweb) : [];
+    console.log('[Seam web] SISWeb pages from cloud: ' + sw.length, sw);
   } catch (e) { bsLectureIndex = []; console.log('[Seam web] lecture_text index query failed:', e && e.message); }
   updateBsStatus();
 }
@@ -558,9 +560,12 @@ function systemPrompt(userText, relevantLectures) {
       descriptions: P(bsData.descriptions, d => d.module, d => (d.title || '') + ' ' + (d.text || ''), 10),
       discussions: P(bsData.discussions, d => (d.courseName || '') + ' ' + (d.forum || ''), d => (d.topic || '') + ' ' + (d.posts || []).map(p => p.body).join(' '), 6),
       lectures: relevantLectures || [], allLectureTitlesByModule: SeamCore.buildLectureIndex(cat),
-      sisweb: bsData.sisweb || null,   // official SISWeb data (results/GPA, timetable, fees) — captured from hub.ucd.ie
     };
-    bsBlock = 'The student has connected their Brightspace — use this data for their grades, deadlines, modules, quizzes, feedback and lectures. Brightspace data: ' + JSON.stringify(ctx).slice(0, 90000);
+    bsBlock = 'The student has connected their Brightspace — use this data for their grades, deadlines, modules, quizzes, feedback and lectures. Brightspace data: ' + JSON.stringify(ctx).slice(0, 88000);
+    // SISWeb appended SEPARATELY so it's never truncated by the big lecture context — it's official UCD data.
+    if (bsData.sisweb && Object.keys(bsData.sisweb).length) {
+      bsBlock += '\n\nOFFICIAL SISWeb DATA (from UCD\'s student system — exam results/GPA, timetable, fees, key dates). This is authoritative; prefer it over Brightspace for grades/results: ' + JSON.stringify(bsData.sisweb).slice(0, 9000);
+    }
   } else {
     bsBlock = 'The student has NOT connected their Brightspace yet, so you do not have their personal grades/deadlines/lectures. If they ask about those, tell them to install the Seam browser extension and sign in with this same account to sync their Brightspace.';
   }

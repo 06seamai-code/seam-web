@@ -558,6 +558,7 @@ function systemPrompt(userText, relevantLectures) {
       descriptions: P(bsData.descriptions, d => d.module, d => (d.title || '') + ' ' + (d.text || ''), 10),
       discussions: P(bsData.discussions, d => (d.courseName || '') + ' ' + (d.forum || ''), d => (d.topic || '') + ' ' + (d.posts || []).map(p => p.body).join(' '), 6),
       lectures: relevantLectures || [], allLectureTitlesByModule: SeamCore.buildLectureIndex(cat),
+      sisweb: bsData.sisweb || null,   // official SISWeb data (results/GPA, timetable, fees) — captured from hub.ucd.ie
     };
     bsBlock = 'The student has connected their Brightspace — use this data for their grades, deadlines, modules, quizzes, feedback and lectures. Brightspace data: ' + JSON.stringify(ctx).slice(0, 90000);
   } else {

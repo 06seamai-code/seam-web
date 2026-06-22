@@ -578,6 +578,10 @@ async function fetchRelevantLectures(userText) {
   const nums = raw.filter(w => /^\d+$/.test(w));
   const words = raw.filter(w => w.length > 2 && !/^\d+$/.test(w) && !LECT_STOPWORDS.has(w));
   if (!words.length && !nums.length) return [];
+  // Quizzes / revision span a module — load more lectures (smaller slices each).
+  const isQuiz = /\b(quiz|revis|practice|test me|flashcard|exam prep|study guide)\b/.test((userText || '').toLowerCase());
+  const limit = isQuiz ? 6 : 3;
+  const perChars = isQuiz ? 9000 : 18000;
   const scored = pool
     .map(l => {
       const tokens = ((l.module || '') + ' ' + (l.title || '')).toLowerCase().match(/[a-z0-9]+/g) || [];
@@ -589,12 +593,12 @@ async function fetchRelevantLectures(userText) {
     })
     .filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+    .slice(0, limit);
   if (!scored.length) return [];
   const urls = scored.map(x => x.l.url);
   const { data } = await sb.from('lecture_text').select('module,title,text').eq('user_id', session.user.id).in('url', urls);
-  const out = (data || []).map(r => ({ title: r.title, module: r.module, text: (r.text || '').slice(0, 20000) })).filter(l => l.text);
-  console.log('[Seam web] query matched (top 3):', scored.map(x => x.l.title + ' [' + x.score + ']'), '→ loaded text for ' + out.length);
+  const out = (data || []).map(r => ({ title: r.title, module: r.module, text: (r.text || '').slice(0, perChars) })).filter(l => l.text);
+  console.log('[Seam web] query matched (top ' + limit + '):', scored.map(x => x.l.title + ' [' + x.score + ']'), '→ loaded text for ' + out.length);
   return out;
 }
 
@@ -618,10 +622,16 @@ function systemPrompt(userText, relevantLectures) {
       assignmentFeedback: P(bsData.assignmentFeedback, f => f.courseName, f => (f.assignment || '') + ' ' + (f.feedback || ''), 12),
       descriptions: P(bsData.descriptions, d => d.module, d => (d.title || '') + ' ' + (d.text || ''), 10),
       discussions: P(bsData.discussions, d => (d.courseName || '') + ' ' + (d.forum || ''), d => (d.topic || '') + ' ' + (d.posts || []).map(p => p.body).join(' '), 6),
-      lectures: relevantLectures || [], allLectureTitlesByModule: SeamCore.buildLectureIndex(cat),
+      allLectureTitlesByModule: SeamCore.buildLectureIndex(cat),
     };
-    bsBlock = 'The student has connected their Brightspace — use this data for their grades, deadlines, modules, quizzes, feedback and lectures. Brightspace data: ' + JSON.stringify(ctx).slice(0, 88000);
-    // SISWeb appended SEPARATELY so it's never truncated by the big lecture context — it's official UCD data.
+    bsBlock = 'The student has connected their Brightspace — use this data for their grades, deadlines, modules, quizzes, feedback and lectures. Brightspace data: ' + JSON.stringify(ctx).slice(0, 60000);
+    // Loaded lecture TEXT appended SEPARATELY so it's NEVER truncated by the rest of the context.
+    // This is the actual slide content — quiz/quote ONLY from what's here.
+    const rl = relevantLectures || [];
+    if (rl.length) {
+      bsBlock += '\n\nLOADED LECTURE TEXT — the full text of the lectures relevant to this question is below. You MAY quote, summarise and build quizzes from THESE (and only these). Slide/page markers like "=== Slide N/Total ===" are reliable. Lectures: ' + JSON.stringify(rl).slice(0, 70000);
+    }
+    // SISWeb appended separately too — official UCD data.
     if (bsData.sisweb && Object.keys(bsData.sisweb).length) {
       bsBlock += '\n\nOFFICIAL SISWeb DATA (from UCD\'s student system — exam results/GPA, timetable, fees, key dates). This is authoritative; prefer it over Brightspace for grades/results: ' + JSON.stringify(bsData.sisweb).slice(0, 9000);
     }

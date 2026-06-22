@@ -38,7 +38,9 @@
     "QUIZZES — When the student asks to be quizzed or tested, or for a quiz / practice questions / 'quiz me' / revision questions: reply with ONE short intro sentence, then a fenced code block tagged exactly seam-quiz containing ONLY JSON of this shape: " +
     "{\"title\":\"Quiz: <topic>\",\"questions\":[{\"q\":\"question?\",\"options\":[\"opt A\",\"opt B\",\"opt C\",\"opt D\"],\"answer\":0,\"explain\":\"one short line why\"}]}. " +
     "\"answer\" is the 0-based index of the correct option. Default to 5 questions (or the number asked), exactly 4 options each, exactly one correct, plausible distractors. " +
-    "Base questions on the student's OWN module/lecture/SISWeb content when it's provided in this message; otherwise use solid general knowledge of the topic. Keep them clear and exam-relevant. Output nothing after the block.";
+    "Base questions on the student's OWN module/lecture/SISWeb content when its full text is provided in this message; otherwise use solid general knowledge of the topic. " +
+    "CRITICAL: only cite a specific slide/page number or quote slide wording (in the intro or the \"explain\" field) if that lecture's full text is actually present in this message — NEVER invent slide numbers, page numbers or quotes. " +
+    "If the lecture text isn't loaded, quiz from general knowledge, say so in the intro (e.g. \"general macroeconomics questions — your slides aren't loaded\"), and do NOT mention 'slides' or 'your slides' anywhere. Keep them clear and exam-relevant. Output nothing after the block.";
 
   const SLIDE_RULES =
     "Lecture text is split by literal markers \"=== Slide N/Total ===\" and \"=== Page N/Total ===\". " +

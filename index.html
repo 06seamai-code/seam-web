@@ -330,6 +330,32 @@
   .quiz-spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* ============ Flashcards (flip deck) ============ */
+  .fc { border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px; margin: 12px 0; background: var(--panel); }
+  .fc-title { font-weight: 600; font-size: 15px; color: var(--ink); margin-bottom: 3px; }
+  .fc-progress { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .fc-card { perspective: 1200px; cursor: pointer; margin-bottom: 8px; }
+  .fc-inner { position: relative; transition: transform .5s cubic-bezier(.4,.2,.2,1); transform-style: preserve-3d; min-height: 132px; }
+  .fc-inner.flipped { transform: rotateY(180deg); }
+  .fc-face { position: absolute; inset: 0; -webkit-backface-visibility: hidden; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; text-align: center; padding: 18px; border-radius: var(--r-md); font-size: 15px; line-height: 1.55; overflow: auto; }
+  .fc-front { background: var(--bg); border: 1px solid var(--line); color: var(--ink); font-weight: 600; }
+  .fc-back { background: var(--accent); color: #fff; transform: rotateY(180deg); font-weight: 500; }
+  .fc-fliphint { font-size: 11.5px; color: var(--muted); text-align: center; margin-bottom: 8px; }
+  .fc-rate { display: flex; gap: 7px; }
+  .fc-btn { flex: 1; padding: 9px 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink); font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background .12s, border-color .12s, color .12s; }
+  .fc-btn:hover { background: var(--line-soft); }
+  .fc-btn[data-r="again"]:hover { border-color: var(--danger); color: var(--danger); }
+  .fc-btn[data-r="good"]:hover, .fc-btn[data-r="easy"]:hover { border-color: var(--ok); color: var(--ok); }
+  .fc-done { font-weight: 600; color: var(--ok); font-size: 14px; padding: 10px 0; text-align: center; }
+
+  /* ============ Citation chips ============ */
+  .cite { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-soft); color: var(--accent-text); border: none; border-radius: 99px; padding: 1.5px 9px; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; vertical-align: middle; margin: 0 1px; transition: filter .12s; }
+  .cite:hover { filter: brightness(.96); text-decoration: underline; }
+
+  /* ============ Review-due button (home) ============ */
+  .review-due { display: inline-block; margin: 18px auto 0; background: var(--accent-soft); color: var(--accent-text); border: 1px solid transparent; border-radius: 99px; padding: 9px 17px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: filter .12s; }
+  .review-due:hover { filter: brightness(.97); }
+
   /* Scrollbars */
   .messages::-webkit-scrollbar, .sb-scroll::-webkit-scrollbar { width: 9px; }
   .messages::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 2px solid var(--canvas); }

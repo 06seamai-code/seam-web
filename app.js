@@ -424,6 +424,9 @@ function inlineMd(s) {
     .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*(?!\s)([^*]+?)\*(?!\*)/g, '$1<em>$2</em>')
+    // Source citations [[src:Topic 3|slide 17]] → clickable chip that pulls that slide.
+    .replace(/\[\[src:([^|\]]+)\|([^\]]+)\]\]/g, (m, n, r) => '<button class="cite" data-q="Show me ' + n.trim() + ' ' + r.trim() + ' word for word">📄 ' + n.trim() + ' · ' + r.trim() + '</button>')
+    .replace(/\[\[src:([^\]]+)\]\]/g, (m, n) => '<button class="cite" data-q="Show me ' + n.trim() + ' word for word">📄 ' + n.trim() + '</button>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 
@@ -475,8 +478,110 @@ function wireQuizzes(container) {
   });
 }
 
-// Set assistant HTML + wire any interactive widgets (quizzes).
-function setSeamHtml(el, text) { el.innerHTML = formatResponse(text); wireQuizzes(el); }
+/* ---------------- Flashcards + spaced repetition (Leitner, localStorage) ---------------- */
+const SR_KEY = 'seam-flashcards-sr';
+const SR_INTERVALS = [10 * 60e3, 1 * 864e5, 2 * 864e5, 4 * 864e5, 8 * 864e5, 16 * 864e5]; // box 0..5
+function srLoad() { try { return JSON.parse(localStorage.getItem(SR_KEY) || '{}'); } catch (e) { return {}; } }
+function srSave(m) { try { localStorage.setItem(SR_KEY, JSON.stringify(m)); } catch (e) {} }
+function srKey(title, front) { return (title || '') + '||' + front; }
+function srRate(card, rating) {       // rating: again|hard|good|easy
+  const m = srLoad();
+  const k = srKey(card.title, card.front);
+  const cur = m[k] || { front: card.front, back: card.back, title: card.title || '', box: 0 };
+  let box = cur.box || 0;
+  if (rating === 'again') box = 0;
+  else if (rating === 'hard') box = Math.max(0, box);
+  else if (rating === 'good') box = Math.min(5, box + 1);
+  else if (rating === 'easy') box = Math.min(5, box + 2);
+  cur.box = box; cur.due = nowMs() + SR_INTERVALS[box]; cur.front = card.front; cur.back = card.back; cur.title = card.title || '';
+  m[k] = cur; srSave(m);
+}
+function srDueCards() { const m = srLoad(); const n = nowMs(); return Object.values(m).filter(c => (c.due || 0) <= n); }
+function nowMs() { return new Date().getTime(); }
+
+// Build an interactive flip-deck from an array of {front, back}.
+function renderFlashcardWidget(title, cards, titleKey) {
+  const cs = (cards || []).slice(0, 40).filter(c => c && c.front);
+  if (!cs.length) return '<div class="md-li">No flashcards.</div>';
+  const data = encodeURIComponent(JSON.stringify({ title: titleKey || title || '', cards: cs }));
+  let h = '<div class="fc" data-deck="' + data + '">';
+  if (title) h += '<div class="fc-title">' + escapeHtml(title) + '</div>';
+  h += '<div class="fc-progress"></div>';
+  h += '<div class="fc-card"><div class="fc-inner">' +
+    '<div class="fc-face fc-front"></div><div class="fc-face fc-back"></div></div></div>';
+  h += '<div class="fc-fliphint">tap the card to flip</div>';
+  h += '<div class="fc-rate" style="display:none">' +
+    '<button class="fc-btn" data-r="again">Again</button>' +
+    '<button class="fc-btn" data-r="hard">Hard</button>' +
+    '<button class="fc-btn" data-r="good">Good</button>' +
+    '<button class="fc-btn" data-r="easy">Easy</button></div>';
+  h += '<div class="fc-done" style="display:none"></div></div>';
+  return h;
+}
+// ```seam-flashcards JSON → flip-deck.
+function renderFlashcards(code) {
+  const json = code.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();
+  let data; try { data = JSON.parse(json); } catch (e) { return '<pre class="md-pre"><code>' + code + '</code></pre>'; }
+  if (!data || !Array.isArray(data.cards)) return '<pre class="md-pre"><code>' + code + '</code></pre>';
+  return renderFlashcardWidget(data.title || 'Flashcards', data.cards, data.title);
+}
+function wireFlashcards(container) {
+  container.querySelectorAll('.fc').forEach(fc => {
+    let deck; try { deck = JSON.parse(decodeURIComponent(fc.dataset.deck)); } catch (e) { return; }
+    const cards = deck.cards || []; const titleKey = deck.title || '';
+    let i = 0, flipped = false;
+    const cardEl = fc.querySelector('.fc-card'), inner = fc.querySelector('.fc-inner');
+    const frontEl = fc.querySelector('.fc-front'), backEl = fc.querySelector('.fc-back');
+    const prog = fc.querySelector('.fc-progress'), rate = fc.querySelector('.fc-rate');
+    const hint = fc.querySelector('.fc-fliphint'), done = fc.querySelector('.fc-done');
+    const show = () => {
+      const c = cards[i]; flipped = false; inner.classList.remove('flipped');
+      frontEl.textContent = c.front; backEl.textContent = c.back || '';
+      prog.textContent = 'Card ' + (i + 1) + ' of ' + cards.length;
+      rate.style.display = 'none'; hint.style.display = 'block';
+    };
+    cardEl.onclick = () => { flipped = !flipped; inner.classList.toggle('flipped', flipped); if (flipped) { rate.style.display = 'flex'; hint.style.display = 'none'; } };
+    rate.querySelectorAll('.fc-btn').forEach(b => b.onclick = () => {
+      srRate({ front: cards[i].front, back: cards[i].back, title: titleKey }, b.dataset.r);
+      i++;
+      if (i >= cards.length) {
+        cardEl.style.display = 'none'; rate.style.display = 'none'; hint.style.display = 'none'; prog.style.display = 'none';
+        done.style.display = 'block'; done.textContent = '✓ Deck complete — saved to your review schedule.';
+        updateReviewChip();
+      } else show();
+    });
+    show();
+  });
+}
+// Citation chips → click pulls that slide.
+function wireCites(container) {
+  container.querySelectorAll('.cite').forEach(b => b.onclick = () => { const inp = $('input'); inp.value = b.dataset.q; inp.focus(); sendMessage(); });
+}
+function wireWidgets(el) { wireQuizzes(el); wireFlashcards(el); wireCites(el); }
+
+// Set assistant HTML + wire all interactive widgets.
+function setSeamHtml(el, text) { el.innerHTML = formatResponse(text); wireWidgets(el); }
+
+// Review due cards locally (no API call) — triggered by "review my flashcards".
+function reviewFlashcards() {
+  appendBubble('user', 'Review my flashcards');
+  const due = srDueCards();
+  if (!due.length) { appendBubble('seam', 'No cards are due right now — nicely done! 🎉 Make new ones any time with “flashcards on [topic]”.'); return; }
+  const bubble = appendBubble('seam', '');
+  bubble.innerHTML = '<p>Here are your <strong>' + due.length + '</strong> card' + (due.length > 1 ? 's' : '') + ' due for review:</p>' +
+    renderFlashcardWidget('Review', due.map(c => ({ front: c.front, back: c.back })), 'Review');
+  wireWidgets(bubble);
+}
+function reviewDueHtml() {
+  const n = srDueCards().length;
+  return n ? '<button class="review-due" data-chip="Review my flashcards">🗂 Review ' + n + ' flashcard' + (n > 1 ? 's' : '') + ' due</button>' : '';
+}
+function updateReviewChip() {
+  const el = document.querySelector('.review-due'); if (!el) return;
+  const n = srDueCards().length;
+  if (!n) el.remove(); else el.textContent = '🗂 Review ' + n + ' flashcard' + (n > 1 ? 's' : '') + ' due';
+}
+function isReviewCommand(t) { return /\breview\b[\s\S]*\b(flashcards?|cards|due)\b/i.test(t) || /^\s*review\s*$/i.test(t); }
 
 // Lightweight markdown → HTML renderer (headings, tables, code blocks, lists, paragraphs).
 function formatResponse(text) {
@@ -485,7 +590,9 @@ function formatResponse(text) {
   // sentinel sits on its own line and is restored after all other processing.
   const blocks = [];
   const staged = src.replace(/```([\w-]+)?\n?([\s\S]*?)```/g, (_m, lang, code) => {
-    if ((lang || '').toLowerCase() === 'seam-quiz') blocks.push(renderQuiz(code));
+    const lg = (lang || '').toLowerCase();
+    if (lg === 'seam-quiz') blocks.push(renderQuiz(code));
+    else if (lg === 'seam-flashcards') blocks.push(renderFlashcards(code));
     else blocks.push('<pre class="md-pre"><code>' + code.replace(/\n+$/, '') + '</code></pre>');
     return '\nSEAMCB' + (blocks.length - 1) + 'END\n';
   });
@@ -548,9 +655,10 @@ function renderMessages(msgs) {
       '<div class="quote"><span class="qmark">“</span>' + escapeHtml(q.text) + '<span class="qmark">”</span>' +
         '<span class="qauthor">— ' + escapeHtml(q.author) + '</span></div>' +
       (connected ? proactiveCardHtml() : onboardCardHtml()) +
+      reviewDueHtml() +
       '<div class="suggest">' + chips.map(c => '<button data-chip="' + escapeHtml(c) + '">' + escapeHtml(c) + '</button>').join('') + '</div>' +
       '</div>';
-    wrap.querySelectorAll('.suggest button').forEach(b => b.onclick = () => {
+    wrap.querySelectorAll('.suggest button, .review-due').forEach(b => b.onclick = () => {
       const inp = $('input'); inp.value = b.dataset.chip; inp.focus(); sendMessage();
     });
     wrap.querySelectorAll('.attn-row').forEach(b => b.onclick = () => {
@@ -570,7 +678,7 @@ function appendBubble(role, content) {
   div.innerHTML = '<div class="avatar ' + cls + '">' + av + '</div><div class="bubble ' + cls + '">' +
     (role === 'user' ? escapeHtml(content) : formatResponse(content)) + '</div>';
   wrap.appendChild(div);
-  if (role !== 'user') wireQuizzes(div);   // make any quiz widgets interactive
+  if (role !== 'user') wireWidgets(div);   // make quizzes/flashcards/citations interactive
   $('messages').scrollTop = $('messages').scrollHeight;
   return div.querySelector('.bubble');
 }
@@ -678,6 +786,8 @@ async function sendMessage() {
   const input = $('input');
   const text = input.value.trim();
   if (!text || !session) return;
+  // "Review my flashcards" is handled locally from the spaced-repetition store — no API call.
+  if (isReviewCommand(text)) { input.value = ''; input.style.height = 'auto'; reviewFlashcards(); return; }
   if (isGenerating) { stopGeneration(); await new Promise(r => setTimeout(r, 50)); }
   if (!activeChatId) await newChat(null);
 
@@ -731,12 +841,13 @@ async function sendMessage() {
     }
     reply = await SeamCore.consumeSSE(resp, (delta, full) => {
       reply = full;
-      const qi = full.indexOf('```seam');   // a quiz block is being generated
+      const qi = full.indexOf('```seam');   // a quiz/flashcard block is being generated
       if (qi !== -1) {
-        // Hide the raw quiz JSON while it streams — show a clean "building" indicator.
+        // Hide the raw JSON while it streams — show a clean "building" indicator.
         bubble.classList.remove('streaming');
         const intro = full.slice(0, qi).trim();
-        bubble.innerHTML = (intro ? formatResponse(intro) : '') + '<div class="quiz-building"><span class="quiz-spin"></span>Building your quiz…</div>';
+        const label = full.indexOf('```seam-flash') !== -1 ? 'Building your flashcards…' : 'Building your quiz…';
+        bubble.innerHTML = (intro ? formatResponse(intro) : '') + '<div class="quiz-building"><span class="quiz-spin"></span>' + label + '</div>';
       } else {
         if (!streamStarted) { bubble.textContent = ''; streamStarted = true; }   // clear any retry notice
         const span = document.createElement('span');

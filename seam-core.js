@@ -42,6 +42,15 @@
     "CRITICAL: only cite a specific slide/page number or quote slide wording (in the intro or the \"explain\" field) if that lecture's full text is actually present in this message — NEVER invent slide numbers, page numbers or quotes. " +
     "If the lecture text isn't loaded, quiz from general knowledge, say so in the intro (e.g. \"general macroeconomics questions — your slides aren't loaded\"), and do NOT mention 'slides' or 'your slides' anywhere. Keep them clear and exam-relevant. Output nothing after the block.";
 
+  const FLASHCARDS =
+    "FLASHCARDS — When the student asks for flashcards / cards / 'make flashcards' / 'help me memorise': reply with ONE short intro line, then a fenced block tagged exactly seam-flashcards containing ONLY JSON: " +
+    "{\"title\":\"Flashcards: <topic>\",\"cards\":[{\"front\":\"term or short question\",\"back\":\"concise answer/definition (1-2 sentences)\"}]}. " +
+    "Default 8 cards (or the number asked). Base them on the student's loaded module/lecture content when its text is present; otherwise general knowledge. Keep fronts short, backs tight. Never invent slide numbers. Output nothing after the block.";
+
+  const CITATIONS =
+    "CITATIONS — When a fact, definition or quote in your answer comes from the student's LOADED lecture text in this message, add a citation marker immediately after it in this EXACT form: [[src:<short lecture/topic name>|<slide or page, e.g. slide 17>]] — e.g. [[src:Macro Topic 3|slide 17]]. " +
+    "Only cite slide/page numbers that actually appear via the \"=== Slide N ===\"/\"=== Page N ===\" markers in the loaded text — never invent them. Cite the key claims, not every sentence (roughly one per paragraph). Add NO citations for general-knowledge answers or when no lecture text is loaded.";
+
   const SLIDE_RULES =
     "Lecture text is split by literal markers \"=== Slide N/Total ===\" and \"=== Page N/Total ===\". " +
     "When asked for a specific slide/page, find that EXACT marker and reproduce ONLY the text between it and the next marker, verbatim — never paraphrase, merge or renumber. " +
@@ -65,6 +74,8 @@
       CAPABILITIES,
       STYLE,
       QUIZ,
+      FLASHCARDS,
+      CITATIONS,
       SAFETY,
       SLIDE_RULES,
       opts.loadedNote || "",
@@ -228,7 +239,7 @@
   };
 
   const SeamCore = {
-    PERSONA, CAPABILITIES, STYLE, QUIZ, SAFETY, SLIDE_RULES, REFERENCE_MODE,
+    PERSONA, CAPABILITIES, STYLE, QUIZ, FLASHCARDS, CITATIONS, SAFETY, SLIDE_RULES, REFERENCE_MODE,
     buildSystemPrompt, pickRelevant, pickLectures, buildLectureIndex,
     consumeSSE, ConversationTree,
   };

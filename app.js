@@ -700,11 +700,19 @@ async function sendMessage() {
     }
     reply = await SeamCore.consumeSSE(resp, (delta, full) => {
       reply = full;
-      if (!streamStarted) { bubble.textContent = ''; streamStarted = true; }   // clear any retry notice
-      const span = document.createElement('span');
-      span.className = 'fade-tok';
-      span.textContent = delta;
-      bubble.appendChild(span);
+      const qi = full.indexOf('```seam');   // a quiz block is being generated
+      if (qi !== -1) {
+        // Hide the raw quiz JSON while it streams — show a clean "building" indicator.
+        bubble.classList.remove('streaming');
+        const intro = full.slice(0, qi).trim();
+        bubble.innerHTML = (intro ? formatResponse(intro) : '') + '<div class="quiz-building"><span class="quiz-spin"></span>Building your quiz…</div>';
+      } else {
+        if (!streamStarted) { bubble.textContent = ''; streamStarted = true; }   // clear any retry notice
+        const span = document.createElement('span');
+        span.className = 'fade-tok';
+        span.textContent = delta;
+        bubble.appendChild(span);
+      }
       $('messages').scrollTop = $('messages').scrollHeight;
     });
     bubble.classList.remove('streaming');

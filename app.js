@@ -98,7 +98,12 @@ async function loadBrightspace() {
   } catch (e) { bsLectureIndex = []; console.log('[Seam web] lecture_text index query failed:', e && e.message); }
   updateBsStatus();
   if (!activeChatId) renderMessages([]);   // re-render home now that bsData is in (adds the "Coming up" card)
+  // New student not connected yet → keep checking so their data appears the moment
+  // their extension finishes syncing (then stop).
+  if (!isConnected()) { if (!connectPoll) connectPoll = setInterval(loadBrightspace, 10000); }
+  else if (connectPoll) { clearInterval(connectPoll); connectPoll = null; }
 }
+let connectPoll = null;
 let bsPoll = null;
 function startBsPoll() { if (!bsPoll) bsPoll = setInterval(updateBsStatus, 8000); }
 function stopBsPoll() { if (bsPoll) { clearInterval(bsPoll); bsPoll = null; } }
@@ -366,6 +371,28 @@ function proactiveCardHtml() {
   return '<div class="attn"><div class="attn-head">Coming up</div>' + rows + '</div>';
 }
 
+// Connected = the extension has synced Brightspace data for this account.
+function isConnected() { return !!(bsData && bsData.courses && bsData.courses.length); }
+
+// Onboarding card shown when a new student hasn't connected Brightspace yet.
+function onboardCardHtml() {
+  const email = (session && session.user && session.user.email) || 'this account';
+  const extUrl = (window.SEAM_CONFIG && window.SEAM_CONFIG.EXTENSION_URL) || '';
+  const cta = extUrl
+    ? '<a class="ob-cta" href="' + escapeHtml(extUrl) + '" target="_blank" rel="noopener">Get the Seam extension →</a>'
+    : '<div class="ob-soon">🧩 Seam extension — coming to the Chrome Web Store</div>';
+  return '<div class="onboard">' +
+    '<div class="ob-title">Connect your Brightspace</div>' +
+    '<div class="ob-sub">Unlock your lectures, grades, deadlines &amp; exam results — synced automatically and kept private to you.</div>' +
+    '<div class="ob-steps">' +
+      '<div class="ob-step"><span class="ob-num">1</span><span>Install the Seam browser extension</span></div>' +
+      '<div class="ob-step"><span class="ob-num">2</span><span>Open Brightspace and sign into Sync with <b>' + escapeHtml(email) + '</b></span></div>' +
+      '<div class="ob-step"><span class="ob-num">3</span><span>Your modules appear here automatically ✨</span></div>' +
+    '</div>' + cta +
+    '<div class="ob-note">Until then you can still chat with Seam for general study help — essays, maths, referencing and more.</div>' +
+    '</div>';
+}
+
 const GREETINGS = [
   "Hello {name}, let's get to work",
   "Welcome back, {name}",
@@ -511,12 +538,16 @@ function renderMessages(msgs) {
     if (!greetState) greetState = { greet: pick(GREETINGS).replace('{name}', name), q: pick(QUOTES) };
     const greet = greetState.greet;
     const q = greetState.q;
-    const chips = ['Quiz me on a module', 'Summarise a lecture', 'Plan my week', 'Help with an essay'];
+    // New students (no Brightspace yet) see connect steps; connected students see "Coming up".
+    const connected = isConnected();
+    const chips = connected
+      ? ['Quiz me on a module', 'Summarise a lecture', 'Plan my week', 'Help with an essay']
+      : ['Help with an essay', 'Explain a tricky concept', 'Harvard referencing', 'Quiz me on a topic'];
     wrap.innerHTML = '<div class="empty"><div class="e-mark">S</div>' +
       '<div class="greet">' + escapeHtml(greet) + '</div>' +
       '<div class="quote"><span class="qmark">“</span>' + escapeHtml(q.text) + '<span class="qmark">”</span>' +
         '<span class="qauthor">— ' + escapeHtml(q.author) + '</span></div>' +
-      proactiveCardHtml() +
+      (connected ? proactiveCardHtml() : onboardCardHtml()) +
       '<div class="suggest">' + chips.map(c => '<button data-chip="' + escapeHtml(c) + '">' + escapeHtml(c) + '</button>').join('') + '</div>' +
       '</div>';
     wrap.querySelectorAll('.suggest button').forEach(b => b.onclick = () => {

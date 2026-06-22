@@ -5,4 +5,7 @@ window.SEAM_CONFIG = {
   // The chat goes through the Edge Function so the Anthropic key stays secret.
   // This resolves to {SUPABASE_URL}/functions/v1/chat once you deploy it.
   CHAT_FUNCTION: "/functions/v1/chat",
+  // Where new students get the Seam extension. Set this to your Chrome Web Store
+  // URL once published; leave "" to show install steps without a live button.
+  EXTENSION_URL: "",
 };

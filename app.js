@@ -12,6 +12,7 @@ let signupMode = false;
 let bsData = null;            // synced Brightspace data (from the extension)
 let bsLectureText = {};       // { lectureUrl: extractedText }
 let bsLectureIndex = [];      // [{ url, module, title }] — ground truth of what's actually in the cloud
+let greetState = null;        // cached greeting+quote for the home view (avoids flicker on re-render)
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,6 +28,7 @@ function applyAuth() {
     $('login').style.display = 'none';
     $('app').style.display = 'block';
     $('user-email').textContent = session.user.email || session.user.user_metadata?.name || 'Signed in';
+    if (!activeChatId) renderMessages([]);   // show the home/greeting state immediately on load
     loadSidebar();
     loadBrightspace();
   } else {
@@ -95,6 +97,7 @@ async function loadBrightspace() {
     console.log('[Seam web] SISWeb pages from cloud: ' + sw.length, sw);
   } catch (e) { bsLectureIndex = []; console.log('[Seam web] lecture_text index query failed:', e && e.message); }
   updateBsStatus();
+  if (!activeChatId) renderMessages([]);   // re-render home now that bsData is in (adds the "Coming up" card)
 }
 let bsPoll = null;
 function startBsPoll() { if (!bsPoll) bsPoll = setInterval(updateBsStatus, 8000); }
@@ -266,6 +269,7 @@ async function newChat(projectId) {
     .select().single();
   if (error) return;
   activeChatId = data.id;
+  greetState = null;   // fresh greeting/quote for a brand-new chat
   await loadSidebar();
   renderMessages([]);
   setChatName('New chat');
@@ -451,8 +455,10 @@ function renderMessages(msgs) {
   wrap.innerHTML = '';
   if (!msgs.length) {
     const name = firstName();
-    const greet = pick(GREETINGS).replace('{name}', name);
-    const q = pick(QUOTES);
+    // Cache greeting+quote for this home view so the two load-time renders don't flicker.
+    if (!greetState) greetState = { greet: pick(GREETINGS).replace('{name}', name), q: pick(QUOTES) };
+    const greet = greetState.greet;
+    const q = greetState.q;
     const chips = ['Summarise a lecture', 'Plan my week', 'Help with an essay', 'Explain a concept'];
     wrap.innerHTML = '<div class="empty"><div class="e-mark">S</div>' +
       '<div class="greet">' + escapeHtml(greet) + '</div>' +

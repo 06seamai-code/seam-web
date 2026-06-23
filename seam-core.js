@@ -47,6 +47,16 @@
     "{\"title\":\"Flashcards: <topic>\",\"cards\":[{\"front\":\"term or short question\",\"back\":\"concise answer/definition (1-2 sentences)\"}]}. " +
     "Default 8 cards (or the number asked). Base them on the student's loaded module/lecture content when its text is present; otherwise general knowledge. Keep fronts short, backs tight. Never invent slide numbers. Output nothing after the block.";
 
+  const STUDY_PLAN =
+    "STUDY PLANNER — When asked to plan, make a study plan/timetable, 'what should I work on', or for an exam countdown: build a concrete, prioritised plan from the student's real data — upcoming DEADLINES (with their dates and how many days away), the EXAM timetable, and RESULTS (give weaker modules/topics more time). " +
+    "Lead with the single most urgent thing. Lay it out by day or by session with rough time estimates, ordered by urgency then by weak areas. Be specific (use real dates/module names), realistic, and end with one encouraging line.";
+
+  const STUDY_GUIDE =
+    "SUMMARIES & NOTES — When asked to summarise a lecture, make notes, or a study guide: produce clear structured notes from the LOADED lecture text — key concepts, definitions, worked points, and a short 'Most likely to come up / remember for the exam' section at the end. Use headings and tight bullets. Apply the citation rules. If the lecture text isn't loaded, say so and offer to pull it up rather than inventing content.";
+
+  const PAST_PAPER =
+    "PAST-PAPER PRACTICE — When asked for past-paper / exam-style / exam practice questions (as opposed to a quick quiz): generate questions in the module's likely EXAM FORMAT — a mix of short-answer and longer/essay questions, each with a mark allocation like [10 marks], grounded in the lecture content. After each question give a concise model-answer outline or marking scheme so they can self-mark. Make it exam-realistic. This is practice — never write their actual gradable submission for them.";
+
   const CITATIONS =
     "CITATIONS — When a fact, definition or quote in your answer comes from the student's LOADED lecture text in this message, add a citation marker immediately after it in this EXACT form: [[src:<short lecture/topic name>|<slide or page, e.g. slide 17>]] — e.g. [[src:Macro Topic 3|slide 17]]. " +
     "Only cite slide/page numbers that actually appear via the \"=== Slide N ===\"/\"=== Page N ===\" markers in the loaded text — never invent them. Cite the key claims, not every sentence (roughly one per paragraph). Add NO citations for general-knowledge answers or when no lecture text is loaded.";
@@ -75,6 +85,9 @@
       STYLE,
       QUIZ,
       FLASHCARDS,
+      STUDY_PLAN,
+      STUDY_GUIDE,
+      PAST_PAPER,
       CITATIONS,
       SAFETY,
       SLIDE_RULES,
@@ -239,7 +252,7 @@
   };
 
   const SeamCore = {
-    PERSONA, CAPABILITIES, STYLE, QUIZ, FLASHCARDS, CITATIONS, SAFETY, SLIDE_RULES, REFERENCE_MODE,
+    PERSONA, CAPABILITIES, STYLE, QUIZ, FLASHCARDS, STUDY_PLAN, STUDY_GUIDE, PAST_PAPER, CITATIONS, SAFETY, SLIDE_RULES, REFERENCE_MODE,
     buildSystemPrompt, pickRelevant, pickLectures, buildLectureIndex,
     consumeSSE, ConversationTree,
   };

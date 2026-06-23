@@ -352,6 +352,22 @@
   .cite { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-soft); color: var(--accent-text); border: none; border-radius: 99px; padding: 1.5px 9px; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; vertical-align: middle; margin: 0 1px; transition: filter .12s; }
   .cite:hover { filter: brightness(.96); text-decoration: underline; }
 
+  /* ============ Message actions (edit / regenerate) ============ */
+  .msg { position: relative; }
+  .msg-actions { position: absolute; bottom: -8px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+  .msg:not(.user) .msg-actions { left: 40px; }
+  .msg.user .msg-actions { right: 2px; }
+  .msg:hover .msg-actions { opacity: 1; }
+  .msg-act { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; color: var(--muted); cursor: pointer; padding: 3px 6px; display: flex; align-items: center; box-shadow: var(--shadow); }
+  .msg-act svg { width: 13px; height: 13px; }
+  .msg-act:hover { color: var(--ink); background: var(--bg); }
+  .bubble.user:has(.edit-ta) { background: transparent; padding: 0; }
+  .edit-ta { width: 100%; min-height: 56px; border: 1.5px solid var(--accent); border-radius: 10px; padding: 9px 11px; font-family: inherit; font-size: 14px; line-height: 1.5; color: var(--ink); background: var(--panel); resize: vertical; outline: none; box-sizing: border-box; }
+  .edit-bar { display: flex; gap: 8px; margin-top: 8px; }
+  .edit-save { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 7px 13px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .edit-save:hover { background: var(--accent-strong); }
+  .edit-cancel { background: var(--bg); border: 1px solid var(--line); color: var(--ink-soft); border-radius: 8px; padding: 7px 13px; font-size: 13px; cursor: pointer; font-family: inherit; }
+
   /* ============ Review-due button (home) ============ */
   .review-due { display: inline-block; margin: 18px auto 0; background: var(--accent-soft); color: var(--accent-text); border: 1px solid transparent; border-radius: 99px; padding: 9px 17px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: filter .12s; }
   .review-due:hover { filter: brightness(.97); }

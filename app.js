@@ -31,6 +31,7 @@ function applyAuth() {
     if (!activeChatId) renderMessages([]);   // show the home/greeting state immediately on load
     loadSidebar();
     loadBrightspace();
+    srHydrate();   // pull flashcards from the cloud so they follow the student across devices
   } else {
     $('login').style.display = 'flex';
     $('app').style.display = 'none';
@@ -478,14 +479,30 @@ function wireQuizzes(container) {
   });
 }
 
-/* ---------------- Flashcards + spaced repetition (Leitner, localStorage) ---------------- */
+/* ---------------- Flashcards + spaced repetition (Leitner, cloud-synced) ---------------- */
+// In-memory cache, hydrated from Supabase on login (localStorage = offline backup).
 const SR_KEY = 'seam-flashcards-sr';
 const SR_INTERVALS = [10 * 60e3, 1 * 864e5, 2 * 864e5, 4 * 864e5, 8 * 864e5, 16 * 864e5]; // box 0..5
-function srLoad() { try { return JSON.parse(localStorage.getItem(SR_KEY) || '{}'); } catch (e) { return {}; } }
-function srSave(m) { try { localStorage.setItem(SR_KEY, JSON.stringify(m)); } catch (e) {} }
+let srCache = null;
+function srLoadLocal() { try { return JSON.parse(localStorage.getItem(SR_KEY) || '{}'); } catch (e) { return {}; } }
+function srSaveLocal(m) { try { localStorage.setItem(SR_KEY, JSON.stringify(m)); } catch (e) {} }
+function srMap() { if (!srCache) srCache = srLoadLocal(); return srCache; }
+function nowMs() { return new Date().getTime(); }
 function srKey(title, front) { return (title || '') + '||' + front; }
+// Pull the user's cards from the cloud so they follow them across devices.
+async function srHydrate() {
+  if (!session) return;
+  try {
+    const { data, error } = await sb.from('flashcards').select('key,front,back,title,box,due').eq('user_id', session.user.id);
+    if (error) throw error;
+    const m = {};
+    for (const r of (data || [])) m[r.key] = { front: r.front, back: r.back, title: r.title || '', box: r.box || 0, due: Number(r.due) || 0 };
+    srCache = m; srSaveLocal(m);
+    if (!activeChatId) renderMessages([]);   // refresh the "review N due" chip
+  } catch (e) { srCache = srLoadLocal(); /* table not set up yet → local only */ }
+}
 function srRate(card, rating) {       // rating: again|hard|good|easy
-  const m = srLoad();
+  const m = srMap();
   const k = srKey(card.title, card.front);
   const cur = m[k] || { front: card.front, back: card.back, title: card.title || '', box: 0 };
   let box = cur.box || 0;
@@ -494,10 +511,11 @@ function srRate(card, rating) {       // rating: again|hard|good|easy
   else if (rating === 'good') box = Math.min(5, box + 1);
   else if (rating === 'easy') box = Math.min(5, box + 2);
   cur.box = box; cur.due = nowMs() + SR_INTERVALS[box]; cur.front = card.front; cur.back = card.back; cur.title = card.title || '';
-  m[k] = cur; srSave(m);
+  m[k] = cur; srSaveLocal(m);
+  // Sync to the cloud (fire-and-forget; harmless if the table isn't set up yet).
+  if (session) sb.from('flashcards').upsert({ user_id: session.user.id, key: k, front: cur.front, back: cur.back, title: cur.title, box: cur.box, due: cur.due, updated_at: new Date().toISOString() }, { onConflict: 'user_id,key' }).then(() => {}, () => {});
 }
-function srDueCards() { const m = srLoad(); const n = nowMs(); return Object.values(m).filter(c => (c.due || 0) <= n); }
-function nowMs() { return new Date().getTime(); }
+function srDueCards() { const m = srMap(); const n = nowMs(); return Object.values(m).filter(c => (c.due || 0) <= n); }
 
 // Build an interactive flip-deck from an array of {front, back}.
 function renderFlashcardWidget(title, cards, titleKey) {
@@ -648,7 +666,7 @@ function renderMessages(msgs) {
     // New students (no Brightspace yet) see connect steps; connected students see "Coming up".
     const connected = isConnected();
     const chips = connected
-      ? ['Quiz me on a module', 'Summarise a lecture', 'Plan my week', 'Help with an essay']
+      ? ['Make me a study plan', 'Quiz me on a module', 'Make flashcards', 'Summarise a lecture', 'Past-paper practice']
       : ['Help with an essay', 'Explain a tricky concept', 'Harvard referencing', 'Quiz me on a topic'];
     wrap.innerHTML = '<div class="empty"><div class="e-mark">S</div>' +
       '<div class="greet">' + escapeHtml(greet) + '</div>' +
@@ -666,9 +684,9 @@ function renderMessages(msgs) {
     });
     return;
   }
-  for (const m of msgs) appendBubble(m.role, m.content);
+  for (const m of msgs) appendBubble(m.role, m.content, m);
 }
-function appendBubble(role, content) {
+function appendBubble(role, content, msg) {
   const wrap = $('mwrap');
   const empty = wrap.querySelector('.empty'); if (empty) empty.remove();
   const div = document.createElement('div');
@@ -679,6 +697,7 @@ function appendBubble(role, content) {
     (role === 'user' ? escapeHtml(content) : formatResponse(content)) + '</div>';
   wrap.appendChild(div);
   if (role !== 'user') wireWidgets(div);   // make quizzes/flashcards/citations interactive
+  if (msg && msg.id) decorateActions(div, role === 'user' ? 'user' : 'seam', msg.id, msg.created_at, content);  // edit / regenerate
   $('messages').scrollTop = $('messages').scrollHeight;
   return div.querySelector('.bubble');
 }
@@ -686,6 +705,7 @@ function appendBubble(role, content) {
 /* ---------------- Sending ---------------- */
 const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
 const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICON_REGEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
 const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z"/></svg>';
 const ICON_SEND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>';
@@ -792,12 +812,11 @@ async function sendMessage() {
   if (!activeChatId) await newChat(null);
 
   input.value = ''; input.style.height = 'auto';
-  appendBubble('user', text);
+  const ub = appendBubble('user', text);
 
-  // Persist the user message + load prior messages for context.
-  await sb.from('messages').insert({ chat_id: activeChatId, user_id: session.user.id, role: 'user', content: text });
-  const { data: prior } = await sb.from('messages').select('role,content').eq('chat_id', activeChatId).order('created_at', { ascending: true });
-  const messages = (prior || []).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
+  // Persist the user message (capture its id so it can be edited).
+  const { data: uins } = await sb.from('messages').insert({ chat_id: activeChatId, user_id: session.user.id, role: 'user', content: text }).select('id,created_at').single();
+  if (uins) decorateActions(ub.closest('.msg'), 'user', uins.id, uins.created_at, text);
 
   // Title the chat from the first user message.
   const { data: chatRow } = await sb.from('chats').select('title').eq('id', activeChatId).single();
@@ -805,9 +824,21 @@ async function sendMessage() {
     await sb.from('chats').update({ title: text.slice(0, 48) }).eq('id', activeChatId);
     setChatName(text.slice(0, 48));
   }
+  await generateReply();
+}
+
+// Produce (or re-produce) the assistant reply for the chat's CURRENT message history.
+// Reused by send, edit and regenerate — it always reads the latest DB state.
+async function generateReply() {
+  if (!activeChatId || !session) return;
+  const { data: prior } = await sb.from('messages').select('role,content').eq('chat_id', activeChatId).order('created_at', { ascending: true });
+  const messages = (prior || []).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
+  if (!messages.length) return;
+  const lastUser = [...(prior || [])].reverse().find(m => m.role === 'user');
+  const userText = lastUser ? lastUser.content : '';
 
   const myAbort = new AbortController(); currentAbort = myAbort; setGenerating(true);
-  const relLect = await fetchRelevantLectures(text);
+  const relLect = await fetchRelevantLectures(userText);
   const bubble = appendBubble('seam', '');
   bubble.classList.add('streaming');
   bubble.textContent = '';
@@ -815,8 +846,7 @@ async function sendMessage() {
   let streamStarted = false;
 
   try {
-    const reqBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1500, system: systemPrompt(text, relLect), messages, stream: true });
-    // Retry on rate-limit (429) / overload (529) with backoff, like the extension.
+    const reqBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1500, system: systemPrompt(userText, relLect), messages, stream: true });
     let resp;
     for (let attempt = 1; attempt <= 4; attempt++) {
       resp = await fetch(CHAT_URL, {
@@ -843,13 +873,12 @@ async function sendMessage() {
       reply = full;
       const qi = full.indexOf('```seam');   // a quiz/flashcard block is being generated
       if (qi !== -1) {
-        // Hide the raw JSON while it streams — show a clean "building" indicator.
         bubble.classList.remove('streaming');
         const intro = full.slice(0, qi).trim();
         const label = full.indexOf('```seam-flash') !== -1 ? 'Building your flashcards…' : 'Building your quiz…';
         bubble.innerHTML = (intro ? formatResponse(intro) : '') + '<div class="quiz-building"><span class="quiz-spin"></span>' + label + '</div>';
       } else {
-        if (!streamStarted) { bubble.textContent = ''; streamStarted = true; }   // clear any retry notice
+        if (!streamStarted) { bubble.textContent = ''; streamStarted = true; }
         const span = document.createElement('span');
         span.className = 'fade-tok';
         span.textContent = delta;
@@ -858,7 +887,7 @@ async function sendMessage() {
       $('messages').scrollTop = $('messages').scrollHeight;
     });
     bubble.classList.remove('streaming');
-    setSeamHtml(bubble, reply);   // clean formatted markdown + interactive quizzes
+    setSeamHtml(bubble, reply);
   } catch (err) {
     bubble.classList.remove('streaming');
     if (err && err.name === 'AbortError') bubble.innerHTML = formatResponse(reply + '\n\n_(stopped)_');
@@ -867,11 +896,54 @@ async function sendMessage() {
     bubble.classList.remove('streaming');
     if (currentAbort === myAbort) { currentAbort = null; setGenerating(false); }
     if (reply.trim()) {
-      await sb.from('messages').insert({ chat_id: activeChatId, user_id: session.user.id, role: 'assistant', content: reply });
+      const { data: ins } = await sb.from('messages').insert({ chat_id: activeChatId, user_id: session.user.id, role: 'assistant', content: reply }).select('id,created_at').single();
       await sb.from('chats').update({ updated_at: new Date().toISOString() }).eq('id', activeChatId);
       loadSidebar();
+      if (ins) decorateActions(bubble.closest('.msg'), 'seam', ins.id, ins.created_at, reply);
     }
   }
+}
+
+/* ---------------- Edit / regenerate ---------------- */
+async function reloadMessages() {
+  const { data: msgs } = await sb.from('messages').select('*').eq('chat_id', activeChatId).order('created_at', { ascending: true });
+  renderMessages(msgs || []);
+}
+function decorateActions(div, role, id, createdAt, content) {
+  if (!div || div.querySelector('.msg-actions')) return;
+  div.dataset.created = createdAt || '';
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+  const mk = (icon, label, fn) => { const b = document.createElement('button'); b.className = 'msg-act'; b.title = label; b.innerHTML = icon; b.onclick = fn; return b; };
+  if (role === 'user') actions.appendChild(mk(ICON_EDIT, 'Edit & resend', () => startEditMessage(div, id, createdAt, content)));
+  else actions.appendChild(mk(ICON_REGEN, 'Regenerate', () => regenerateFrom(createdAt)));
+  div.appendChild(actions);
+}
+function startEditMessage(div, id, createdAt, content) {
+  if (isGenerating) return;
+  const bubble = div.querySelector('.bubble');
+  const ta = document.createElement('textarea'); ta.className = 'edit-ta'; ta.value = content;
+  const bar = document.createElement('div'); bar.className = 'edit-bar';
+  const save = document.createElement('button'); save.className = 'edit-save'; save.textContent = 'Save & resend';
+  const cancel = document.createElement('button'); cancel.className = 'edit-cancel'; cancel.textContent = 'Cancel';
+  bar.append(save, cancel);
+  bubble.innerHTML = ''; bubble.append(ta, bar);
+  ta.focus(); ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+  cancel.onclick = () => { bubble.textContent = content; };
+  save.onclick = async () => {
+    const nt = ta.value.trim(); if (!nt) return;
+    save.disabled = true;
+    await sb.from('messages').update({ content: nt }).eq('id', id);
+    await sb.from('messages').delete().eq('chat_id', activeChatId).gt('created_at', createdAt);  // drop everything after
+    await reloadMessages();
+    await generateReply();
+  };
+}
+async function regenerateFrom(createdAt) {
+  if (isGenerating) { stopGeneration(); await new Promise(r => setTimeout(r, 50)); }
+  await sb.from('messages').delete().eq('chat_id', activeChatId).gte('created_at', createdAt);  // drop this reply + after
+  await reloadMessages();
+  await generateReply();
 }
 
 $('send').onclick = () => { if (isGenerating) stopGeneration(); else sendMessage(); };
